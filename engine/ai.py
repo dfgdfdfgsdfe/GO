@@ -6,9 +6,8 @@ class GoAI:
     def __init__(self):
 
         self.mcts = MCTS(
-            min_time=0,
-            max_time=2,
-            rollout_depth=20
+            max_time=2.5,
+            rollout_depth=60
         )
 
     def select_move(self, board):
