@@ -215,6 +215,22 @@ with left_col:
             ==
             st.session_state.player_color
         ):
+            current_click = (
+                board_x,
+                board_y
+            )
+
+            if (
+                st.session_state.last_click
+                ==
+                current_click
+            ):
+
+                st.stop()
+
+            st.session_state.last_click = (
+                current_click
+            )
 
             success = board.place_stone(
                 board_x,
