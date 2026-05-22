@@ -2,224 +2,179 @@ import math
 import random
 import time
 
-from engine.board import BLACK
-from engine.scoring import score_game
+from engine.board import BLACK, WHITE, EMPTY
 
 
 class Node:
 
-    def __init__(
-        self,
-        board,
-        parent=None,
-        move=None
-    ):
+    def __init__(self, board, parent=None, move=None):
 
         self.board = board
-
         self.parent = parent
-
         self.move = move
 
         self.children = []
 
         self.visits = 0
-
         self.wins = 0
 
     def ucb1(self, c=1.4):
 
         if self.visits == 0:
-
             return float("inf")
 
-        exploitation = (
+        return (
             self.wins / self.visits
-        )
-
-        exploration = (
-            c *
-            math.sqrt(
+            +
+            c * math.sqrt(
                 math.log(self.parent.visits + 1)
-                /
-                self.visits
+                / self.visits
             )
         )
-
-        return exploitation + exploration
 
 
 class MCTS:
 
-    def __init__(
-        self,
-        min_time=0,
-        max_time=3,
-        rollout_depth=30
-    ):
-
-        self.min_time = min_time
+    def __init__(self, max_time=2.5, rollout_depth=60):
 
         self.max_time = max_time
-
         self.rollout_depth = rollout_depth
 
-    def valid_moves(self, board):
+    # -----------------------------
+    # 후보 수 생성 (핵심 강화)
+    # -----------------------------
+    def get_candidates(self, board):
 
         moves = []
 
-        for x in range(board.size):
+        center = board.size // 2
 
+        for x in range(board.size):
             for y in range(board.size):
 
+                if board.board[x, y] != EMPTY:
+                    continue
+
+                score = 0
+
+                # 중앙 선호
+                score -= abs(x - center) + abs(y - center)
+
+                # 주변 돌 있으면 + (전투 유도)
+                for nx, ny in board.neighbors(x, y):
+                    if board.board[nx, ny] != EMPTY:
+                        score += 5
+
+                # 잡을 수 있는 수 우선
                 temp = board.copy()
+                temp.place_stone(x, y)
 
-                if temp.place_stone(x, y):
+                captured = (
+                    board.black_captures + board.white_captures
+                )
 
-                    moves.append((x, y))
+                if captured > 0:
+                    score += 50
 
-        random.shuffle(moves)
+                moves.append((score, (x, y)))
 
-        return moves[:40]
+        moves.sort(reverse=True, key=lambda x: x[0])
 
+        return [m[1] for m in moves[:20]]  # ⭐ 핵심: 20개만 탐색
+
+    # -----------------------------
+    # 선택
+    # -----------------------------
     def select(self, node):
 
         while node.children:
 
-            node = max(
-                node.children,
-                key=lambda n: n.ucb1()
-            )
+            node = max(node.children, key=lambda n: n.ucb1())
 
         return node
 
+    # -----------------------------
+    # 확장
+    # -----------------------------
     def expand(self, node):
 
-        moves = self.valid_moves(
-            node.board
-        )
+        moves = self.get_candidates(node.board)
 
-        for move in moves:
+        for x, y in moves:
 
             temp = node.board.copy()
 
-            temp.place_stone(
-                move[0],
-                move[1]
-            )
+            if temp.place_stone(x, y):
 
-            child = Node(
-                temp,
-                parent=node,
-                move=move
-            )
+                child = Node(temp, node, (x, y))
+                node.children.append(child)
 
-            node.children.append(child)
-
+    # -----------------------------
+    # rollout (강화됨)
+    # -----------------------------
     def simulate(self, board):
 
         temp = board.copy()
 
-        for _ in range(
-            self.rollout_depth
-        ):
+        for _ in range(self.rollout_depth):
 
-            moves = self.valid_moves(temp)
+            moves = self.get_candidates(temp)
 
             if not moves:
-
                 break
 
-            move = random.choice(moves)
+            # 상위 5개 중 선택 (랜덤성 + 질)
+            move = random.choice(moves[:5])
 
-            temp.place_stone(
-                move[0],
-                move[1]
-            )
+            temp.place_stone(move[0], move[1])
 
-        black_score, white_score = (
-            score_game(temp)
-        )
+        black = temp.black_captures
+        white = temp.white_captures
 
-        if black_score > white_score:
+        return BLACK if black >= white else WHITE
 
-            return BLACK
-
-        return 2
-
-    def backpropagate(
-        self,
-        node,
-        winner,
-        root_color
-    ):
+    # -----------------------------
+    # backprop
+    # -----------------------------
+    def backpropagate(self, node, winner, root_color):
 
         while node:
 
             node.visits += 1
 
             if winner == root_color:
-
                 node.wins += 1
 
             node = node.parent
 
+    # -----------------------------
+    # search
+    # -----------------------------
     def search(self, board):
 
         root = Node(board.copy())
-
         root_color = board.turn
 
         self.expand(root)
 
-        if not root.children:
-
-            return None, 0.5
-
-        think_time = random.uniform(
-            self.min_time,
-            self.max_time
-        )
-
         start = time.time()
 
-        while (
-            time.time() - start
-            <
-            think_time
-        ):
+        while time.time() - start < self.max_time:
 
             node = self.select(root)
 
             if node.visits > 0:
-
                 self.expand(node)
 
                 if node.children:
+                    node = random.choice(node.children)
 
-                    node = random.choice(
-                        node.children
-                    )
+            winner = self.simulate(node.board)
 
-            winner = self.simulate(
-                node.board
-            )
+            self.backpropagate(node, winner, root_color)
 
-            self.backpropagate(
-                node,
-                winner,
-                root_color
-            )
+        best = max(root.children, key=lambda n: n.visits)
 
-        best = max(
-            root.children,
-            key=lambda n: n.visits
-        )
-
-        winrate = (
-            best.wins
-            /
-            max(best.visits, 1)
-        )
+        winrate = best.wins / max(best.visits, 1)
 
         return best.move, winrate
