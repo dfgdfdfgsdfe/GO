@@ -70,6 +70,10 @@ if "last_ai_winrate" not in st.session_state:
 
     st.session_state.last_ai_winrate = 0.5
 
+if "last_click" not in st.session_state:
+
+    st.session_state.last_click = None
+
 
 board = st.session_state.board
 ai = st.session_state.ai
