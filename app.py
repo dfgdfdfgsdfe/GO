@@ -166,9 +166,15 @@ with left_col:
             px = clicked["x"]
             py = clicked["y"]
 
+        elif isinstance(clicked, (list, tuple)):
+
+            px = clicked[0]
+            py = clicked[1]
+
         else:
 
-            px, py = clicked
+            px = 0
+            py = 0
 
         width, height = image.size
 
@@ -230,7 +236,6 @@ with left_col:
                     )
 
                 st.rerun()
-
 
 # ---------------------------------
 # 우측 패널
