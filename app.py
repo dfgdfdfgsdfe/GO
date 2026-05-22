@@ -1,360 +1,202 @@
 import sys
 import os
-
-sys.path.append(os.path.dirname(__file__))
-
-import matplotlib
-matplotlib.use("Agg")
-
 import io
 
 import streamlit as st
 import matplotlib.pyplot as plt
-
 from PIL import Image
 
-from streamlit_image_coordinates import (
-    streamlit_image_coordinates
-)
+sys.path.append(os.path.dirname(__file__))
 
-from engine.board import (
-    GoBoard,
-    BLACK,
-    WHITE
-)
-
+from engine.board import GoBoard, BLACK, WHITE
 from engine.ai import GoAI
-
 from engine.scoring import score_game
-
 from ui.renderer import render_board
 
 
-# ---------------------------------
+# -----------------------------
 # 페이지 설정
-# ---------------------------------
+# -----------------------------
 st.set_page_config(
-    page_title="MCTS 바둑 AI",
+    page_title="Go AI",
     layout="wide"
 )
 
 
-# ---------------------------------
-# 세션 상태 초기화
-# ---------------------------------
+# -----------------------------
+# 초기 세팅
+# -----------------------------
 if "board" not in st.session_state:
-
     st.session_state.board = GoBoard(19)
 
 if "ai" not in st.session_state:
-
     st.session_state.ai = GoAI()
 
 if "player_color" not in st.session_state:
-
     st.session_state.player_color = BLACK
 
 if "game_over" not in st.session_state:
-
     st.session_state.game_over = False
 
 if "winner_text" not in st.session_state:
-
     st.session_state.winner_text = ""
 
 if "winrate_history" not in st.session_state:
-
     st.session_state.winrate_history = []
-
-if "last_ai_winrate" not in st.session_state:
-
-    st.session_state.last_ai_winrate = 0.5
-
-if "last_click" not in st.session_state:
-
-    st.session_state.last_click = None
 
 
 board = st.session_state.board
 ai = st.session_state.ai
 
-# board 객체 복구
-if not hasattr(board, "size"):
 
-    st.session_state.board = GoBoard(19)
-
-    board = st.session_state.board
-
-
-# ---------------------------------
+# -----------------------------
 # 제목
-# ---------------------------------
-st.title("19x19 한국식 MCTS 바둑 AI")
+# -----------------------------
+st.title("19x19 바둑 AI (A1 입력 버전)")
 
 
-# ---------------------------------
+# -----------------------------
 # 사이드바
-# ---------------------------------
+# -----------------------------
 with st.sidebar:
 
     st.header("설정")
 
-    side = st.radio(
-        "플레이 색상",
-        ["흑", "백"]
-    )
+    color = st.radio("플레이 색상", ["흑", "백"])
 
     st.session_state.player_color = (
-        BLACK if side == "흑"
-        else WHITE
+        BLACK if color == "흑" else WHITE
     )
-
-    st.markdown("---")
 
     if st.button("새 게임"):
 
         st.session_state.board = GoBoard(19)
-
         st.session_state.ai = GoAI()
-
         st.session_state.game_over = False
-
         st.session_state.winner_text = ""
-
         st.session_state.winrate_history = []
-
-        st.session_state.last_ai_winrate = 0.5
 
         st.rerun()
 
 
-# ---------------------------------
-# 레이아웃
-# ---------------------------------
-left_col, right_col = st.columns([3, 1])
-
-
-# ---------------------------------
+# -----------------------------
 # 바둑판 표시
-# ---------------------------------
-with left_col:
+# -----------------------------
+st.subheader("바둑판")
 
-    st.subheader("바둑판")
+fig = render_board(board)
 
-    fig = render_board(board)
+buf = io.BytesIO()
+fig.savefig(buf, format="png", bbox_inches="tight")
+buf.seek(0)
 
-    buf = io.BytesIO()
+image = Image.open(buf)
 
-    fig.savefig(
-        buf,
-        format="png",
-        bbox_inches="tight"
-    )
+st.image(image)
 
-    buf.seek(0)
 
-    image = Image.open(buf)
+# -----------------------------
+# 입력 (A1 방식)
+# -----------------------------
+move = st.text_input("착수 (예: D4, Q16)")
 
-    clicked = (
-        streamlit_image_coordinates(
-            image,
-            key="board"
-        )
-    )
+if st.button("착수"):
 
-    # -----------------------------
-    # 클릭 착수
-    # -----------------------------
-    if (
-        clicked is not None
-        and
-        not st.session_state.game_over
-    ):
+    if not st.session_state.game_over:
 
-        # 버전별 반환값 처리
-        if isinstance(clicked, dict):
+        if move and len(move) >= 2:
 
-            px = clicked["x"]
-            py = clicked["y"]
+            col_char = move[0].upper()
+            row_num = move[1:]
 
-        elif isinstance(clicked, (list, tuple)):
+            # column 변환 (A-H, J-T)
+            col = ord(col_char) - ord("A")
+            if col_char >= "I":
+                col -= 1
 
-            px = clicked[0]
-            py = clicked[1]
-
-        else:
-
-            px = 0
-            py = 0
-
-        width, height = image.size
-
-        # 픽셀 → 바둑 좌표 변환
-        board_x = round(
-            py / (height / 19)
-        )
-
-        board_y = round(
-            px / (width / 19)
-        )
-
-        # 범위 보정
-        board_x = max(
-            0,
-            min(18, board_x)
-        )
-
-        board_y = max(
-            0,
-            min(18, board_y)
-        )
-
-        # 플레이어 차례인지 확인
-        if (
-            board.turn
-            ==
-            st.session_state.player_color
-        ):
-            current_click = (
-                board_x,
-                board_y
-            )
-
-            if (
-                st.session_state.last_click
-                ==
-                current_click
-            ):
-
+            try:
+                row = int(row_num) - 1
+                row = 18 - row
+            except:
+                st.error("형식 오류 (예: D4)")
                 st.stop()
 
-            st.session_state.last_click = (
-                current_click
-            )
+            if (
+                0 <= row < 19
+                and 0 <= col < 19
+            ):
 
-            success = board.place_stone(
-                board_x,
-                board_y
-            )
+                if board.turn == st.session_state.player_color:
 
-            if success:
+                    success = board.place_stone(row, col)
 
-                with st.spinner(
-                    "AI가 생각 중..."
-                ):
+                    if success:
 
-                    ai_move, winrate = (
-                        ai.select_move(board)
-                    )
+                        with st.spinner("AI 생각 중..."):
 
-                st.session_state.last_ai_winrate = (
-                    winrate
-                )
+                            ai_move, winrate = ai.select_move(board)
 
-                st.session_state.winrate_history.append(
-                    winrate
-                )
+                        st.session_state.winrate_history.append(winrate)
 
-                if ai_move is not None:
+                        if ai_move:
 
-                    board.place_stone(
-                        ai_move[0],
-                        ai_move[1]
-                    )
+                            board.place_stone(
+                                ai_move[0],
+                                ai_move[1]
+                            )
 
-                st.rerun()
+                        st.rerun()
 
-# ---------------------------------
-# 우측 패널
-# ---------------------------------
-with right_col:
+            else:
 
-    current_turn = (
-        "흑"
-        if board.turn == BLACK
-        else "백"
-    )
+                st.error("범위를 벗어난 수입니다.")
 
-    st.subheader("현재 상태")
 
-    st.write(
-        f"현재 차례: {current_turn}"
-    )
+# -----------------------------
+# 패스 / 계가 / 항복
+# -----------------------------
+col1, col2, col3 = st.columns(3)
 
-    st.write(
-        f"흑 사석: "
-        f"{board.black_captures}"
-    )
+with col1:
 
-    st.write(
-        f"백 사석: "
-        f"{board.white_captures}"
-    )
-
-    st.write(
-        f"AI 최근 승률: "
-        f"{st.session_state.last_ai_winrate:.1%}"
-    )
-
-    st.markdown("---")
-
-    # -----------------------------
-    # 패스
-    # -----------------------------
     if st.button("패스"):
 
         board.pass_turn()
 
         if board.game_over():
 
-            black, white = (
-                score_game(board)
-            )
+            black, white = score_game(board)
 
-            winner = (
-                "흑"
-                if black > white
-                else "백"
-            )
+            winner = "흑" if black > white else "백"
 
             st.session_state.winner_text = (
-                f"{winner} 승 "
-                f"(흑 {black:.1f}"
-                f" / 백 {white:.1f})"
+                f"{winner} 승 (흑 {black:.1f} / 백 {white:.1f})"
             )
 
             st.session_state.game_over = True
 
         st.rerun()
 
-    # -----------------------------
-    # 계가
-    # -----------------------------
+
+with col2:
+
     if st.button("계가"):
 
-        black, white = (
-            score_game(board)
-        )
+        black, white = score_game(board)
 
-        winner = (
-            "흑"
-            if black > white
-            else "백"
-        )
+        winner = "흑" if black > white else "백"
 
         st.session_state.winner_text = (
-            f"{winner} 승 "
-            f"(흑 {black:.1f}"
-            f" / 백 {white:.1f})"
+            f"{winner} 승 (흑 {black:.1f} / 백 {white:.1f})"
         )
 
         st.session_state.game_over = True
 
         st.rerun()
 
-    # -----------------------------
-    # 항복
-    # -----------------------------
+
+with col3:
+
     if st.button("항복"):
 
         loser = (
@@ -363,57 +205,41 @@ with right_col:
             else "백"
         )
 
-        winner = (
-            "백"
-            if loser == "흑"
-            else "흑"
-        )
+        winner = "백" if loser == "흑" else "흑"
 
-        st.session_state.winner_text = (
-            f"{loser} 항복 → {winner} 승"
-        )
+        st.session_state.winner_text = f"{loser} 항복 → {winner} 승"
 
         st.session_state.game_over = True
 
         st.rerun()
 
 
-# ---------------------------------
+# -----------------------------
 # 승률 그래프
-# ---------------------------------
-st.subheader("AI 승률 그래프")
+# -----------------------------
+st.subheader("AI 승률")
 
 if st.session_state.winrate_history:
 
-    fig2, ax = plt.subplots(
-        figsize=(10, 3)
-    )
+    fig2, ax = plt.subplots()
 
-    ax.plot(
-        st.session_state.winrate_history
-    )
+    ax.plot(st.session_state.winrate_history)
 
     ax.set_ylim(0, 1)
 
-    ax.set_ylabel("AI 승률")
-
     ax.set_xlabel("턴")
+    ax.set_ylabel("승률")
 
     st.pyplot(fig2)
 
 else:
 
-    st.info(
-        "아직 승률 데이터가 없습니다."
-    )
+    st.info("아직 데이터 없음")
 
 
-# ---------------------------------
-# 게임 종료 표시
-# ---------------------------------
+# -----------------------------
+# 종료 표시
+# -----------------------------
 if st.session_state.game_over:
 
-    st.success(
-        f"게임 종료: "
-        f"{st.session_state.winner_text}"
-    )
+    st.success(st.session_state.winner_text)
