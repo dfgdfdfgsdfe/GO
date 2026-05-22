@@ -24,25 +24,20 @@ st.set_page_config(
 
 
 # -----------------------------
-# 초기 세팅
+# 초기 상태
 # -----------------------------
-if "board" not in st.session_state:
+def init_game():
+
     st.session_state.board = GoBoard(19)
-
-if "ai" not in st.session_state:
     st.session_state.ai = GoAI()
-
-if "player_color" not in st.session_state:
     st.session_state.player_color = BLACK
-
-if "game_over" not in st.session_state:
     st.session_state.game_over = False
-
-if "winner_text" not in st.session_state:
     st.session_state.winner_text = ""
-
-if "winrate_history" not in st.session_state:
     st.session_state.winrate_history = []
+
+
+if "board" not in st.session_state:
+    init_game()
 
 
 board = st.session_state.board
@@ -52,31 +47,17 @@ ai = st.session_state.ai
 # -----------------------------
 # 제목
 # -----------------------------
-st.title("19x19 바둑 AI (A1 입력 버전)")
+st.title("바둑 AI (A1 입력 버전)")
 
 
 # -----------------------------
-# 사이드바
+# 새 게임
 # -----------------------------
-with st.sidebar:
+if st.button("새 게임"):
 
-    st.header("설정")
+    init_game()
 
-    color = st.radio("플레이 색상", ["흑", "백"])
-
-    st.session_state.player_color = (
-        BLACK if color == "흑" else WHITE
-    )
-
-    if st.button("새 게임"):
-
-        st.session_state.board = GoBoard(19)
-        st.session_state.ai = GoAI()
-        st.session_state.game_over = False
-        st.session_state.winner_text = ""
-        st.session_state.winrate_history = []
-
-        st.rerun()
+    st.rerun()
 
 
 # -----------------------------
@@ -96,7 +77,7 @@ st.image(image)
 
 
 # -----------------------------
-# 입력 (A1 방식)
+# 입력
 # -----------------------------
 move = st.text_input("착수 (예: D4, Q16)")
 
@@ -109,7 +90,7 @@ if st.button("착수"):
             col_char = move[0].upper()
             row_num = move[1:]
 
-            # column 변환 (A-H, J-T)
+            # A1 → 좌표 변환
             col = ord(col_char) - ord("A")
             if col_char >= "I":
                 col -= 1
@@ -117,21 +98,18 @@ if st.button("착수"):
             try:
                 row = int(row_num) - 1
                 row = 18 - row
+
             except:
                 st.error("형식 오류 (예: D4)")
                 st.stop()
 
-            if (
-                0 <= row < 19
-                and 0 <= col < 19
-            ):
+            if 0 <= row < 19 and 0 <= col < 19:
 
                 if board.turn == st.session_state.player_color:
 
-                    success = board.place_stone(row, col)
+                    if board.place_stone(row, col):
 
-                    if success:
-
+                        # AI 응수
                         with st.spinner("AI 생각 중..."):
 
                             ai_move, winrate = ai.select_move(board)
@@ -140,22 +118,19 @@ if st.button("착수"):
 
                         if ai_move:
 
-                            board.place_stone(
-                                ai_move[0],
-                                ai_move[1]
-                            )
+                            board.place_stone(ai_move[0], ai_move[1])
 
                         st.rerun()
 
             else:
-
-                st.error("범위를 벗어난 수입니다.")
+                st.error("범위 오류")
 
 
 # -----------------------------
-# 패스 / 계가 / 항복
+# 기능 버튼
 # -----------------------------
 col1, col2, col3 = st.columns(3)
+
 
 with col1:
 
@@ -234,7 +209,7 @@ if st.session_state.winrate_history:
 
 else:
 
-    st.info("아직 데이터 없음")
+    st.info("데이터 없음")
 
 
 # -----------------------------
