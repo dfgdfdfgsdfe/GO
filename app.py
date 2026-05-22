@@ -1,3 +1,8 @@
+import sys
+import os
+
+sys.path.append(os.path.dirname(__file__))
+
 import matplotlib
 matplotlib.use("Agg")
 
@@ -155,11 +160,19 @@ with left_col:
         not st.session_state.game_over
     ):
 
-        px = clicked["x"]
-        py = clicked["y"]
+        # 버전별 반환값 처리
+        if isinstance(clicked, dict):
+
+            px = clicked["x"]
+            py = clicked["y"]
+
+        else:
+
+            px, py = clicked
 
         width, height = image.size
 
+        # 픽셀 → 바둑 좌표 변환
         board_x = round(
             py / (height / 19)
         )
@@ -168,6 +181,7 @@ with left_col:
             px / (width / 19)
         )
 
+        # 범위 보정
         board_x = max(
             0,
             min(18, board_x)
@@ -178,6 +192,7 @@ with left_col:
             min(18, board_y)
         )
 
+        # 플레이어 차례인지 확인
         if (
             board.turn
             ==
