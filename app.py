@@ -74,6 +74,13 @@ if "last_ai_winrate" not in st.session_state:
 board = st.session_state.board
 ai = st.session_state.ai
 
+# board 객체 복구
+if not hasattr(board, "size"):
+
+    st.session_state.board = GoBoard(19)
+
+    board = st.session_state.board
+
 
 # ---------------------------------
 # 제목
